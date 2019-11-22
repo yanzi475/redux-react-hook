@@ -95,7 +95,7 @@ describe('redux-react-hook', () => {
 
       render(<Component />);
 
-      updateStore({bar: 123, foo: 'foo'});
+      updateStore({...state, foo: 'foo'});
 
       expect(getText()).toBe('foo');
     });
@@ -131,9 +131,58 @@ describe('redux-react-hook', () => {
 
       expect(getText()).toBe('bar 1');
 
-      updateStore({bar: 456, ...state});
+      updateStore({...state, bar: 456});
 
       expect(getText()).toBe('bar 1');
+    });
+
+    it('uses the passed in version of areEqual that is always false', () => {
+      const mapState = () => 'constant';
+      const areEqual = () => false;
+      let renderCount = 0;
+      const Component = () => {
+        const result = useMappedState(mapState, areEqual);
+        renderCount++;
+        return (
+          <div>
+            {result} {renderCount}
+          </div>
+        );
+      };
+
+      render(<Component />);
+
+      expect(getText()).toBe('constant 2');
+
+      updateStore({...state, bar: 456});
+
+      // Nothing changed, but areEqual returned false
+      expect(getText()).toBe('constant 3');
+    });
+
+    it('uses the passed in version of areEqual to compare maps', () => {
+      const mapState = (s: IState) => new Map([['foo', s.foo]]);
+      const areEqual = (a: Map<string, string>, b: Map<string, string>) => {
+        return a.get('foo') === b.get('foo');
+      };
+      let renderCount = 0;
+      const Component = () => {
+        const foo = useMappedState(mapState, areEqual).get('foo');
+        renderCount++;
+        return (
+          <div>
+            {foo} {renderCount}
+          </div>
+        );
+      };
+
+      render(<Component />);
+
+      expect(getText()).toBe('bar 1');
+
+      updateStore({...state, foo: 'baz'});
+
+      expect(getText()).toBe('baz 2');
     });
 
     it('rerenders if the mapState function changes', () => {
@@ -292,13 +341,11 @@ describe('redux-react-hook', () => {
     });
 
     it('renders with latest state', () => {
-      let renderCount = 0;
       const Component = ({prop}: {prop: any}) => {
         const mapState1 = React.useCallback((s: IState) => s.bar, [prop]);
         const mapState2 = React.useCallback((s: IState) => s.foo, [prop]);
         const bar = useMappedState(mapState1);
         const foo = useMappedState(mapState2);
-        renderCount++;
         return (
           <span>
             {bar}
@@ -420,6 +467,36 @@ describe('redux-react-hook', () => {
       expect(first.StoreContext).not.toBe(second.StoreContext);
       expect(first.useDispatch).not.toBe(second.useDispatch);
       expect(first.useMappedState).not.toBe(second.useMappedState);
+    });
+
+    it('sets the default areEqual function', () => {
+      const {StoreContext, useMappedState} = create({defaultAreEqual: () => false});
+
+      const mapState = () => 'constant';
+      const areEqual = () => false;
+      let renderCount = 0;
+      const Component = () => {
+        const result = useMappedState(mapState, areEqual);
+        renderCount++;
+        return (
+          <div>
+            {result} {renderCount}
+          </div>
+        );
+      };
+
+      render(
+        <StoreContext.Provider value={store}>
+          <Component />
+        </StoreContext.Provider >
+      );
+
+      expect(getText()).toBe('constant 2');
+
+      updateStore({...state, bar: 456});
+
+      // Nothing changed, but areEqual returned false
+      expect(getText()).toBe('constant 3');
     });
   });
 });
